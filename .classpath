@@ -1,10 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <classpath>
+	<classpathentry kind="src" path="src"/>
 	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER/org.eclipse.jdt.internal.debug.ui.launcher.StandardVMType/JavaSE-14">
 		<attributes>
 			<attribute name="module" value="true"/>
 		</attributes>
 	</classpathentry>
-	<classpathentry kind="src" path="src"/>
+	<classpathentry kind="lib" path="libs/jaco-mp3-player-0.9.3.jar"/>
+	<classpathentry kind="lib" path="libs jlayer control volume/jlayer-1.0.jar"/>
+	<classpathentry kind="lib" path="libs jlayer control volume/mp3spi1.9.5.jar"/>
+	<classpathentry kind="lib" path="libs jlayer control volume/tritonus_share.jar"/>
 	<classpathentry kind="output" path="bin"/>
 </classpath>
