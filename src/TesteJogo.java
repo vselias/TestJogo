@@ -3,6 +3,8 @@ import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.Image;
 import java.awt.Toolkit;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
 import java.awt.event.KeyAdapter;
@@ -14,8 +16,8 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
-import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import javax.sound.sampled.AudioFormat;
 import javax.sound.sampled.AudioInputStream;
@@ -27,6 +29,7 @@ import javax.sound.sampled.UnsupportedAudioFileException;
 import javax.swing.BorderFactory;
 import javax.swing.GroupLayout;
 import javax.swing.GroupLayout.Alignment;
+import javax.swing.Icon;
 import javax.swing.ImageIcon;
 import javax.swing.JButton;
 import javax.swing.JFrame;
@@ -34,16 +37,13 @@ import javax.swing.JLabel;
 import javax.swing.JMenu;
 import javax.swing.JMenuBar;
 import javax.swing.JMenuItem;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.LayoutStyle.ComponentPlacement;
 import javax.swing.border.Border;
 import javax.swing.border.EmptyBorder;
 
 import jaco.mp3.player.MP3Player;
-import java.awt.Window.Type;
-import java.awt.Dialog.ModalExclusionType;
-import java.awt.event.MouseMotionAdapter;
-import java.awt.event.MouseEvent;
 
 public class TesteJogo extends JFrame {
 
@@ -64,11 +64,18 @@ public class TesteJogo extends JFrame {
 	private final static int SACOLA_HEIGHT = 65;
 	private final static int PAH_WIDTH = 65;
 	private final static int PAH_HEIGHT = 65;
+	private int frameWidth = 848;
 	static TesteJogo frame;
+	private int velocidadeSacola = 20;
+	private int tempNovaSacola = 3000;
+	int contFaseUm = 0;
+	int contFaseDois = 0;
+	int vidas = 3;
+	private ThreadMoverSacola threadMoverSacola;
+	private ThreadCriaSacola threadCriaSacola;
+	private AtomicBoolean criaSacolaAtiva = new AtomicBoolean(true);
+	private Derrota derrota = Derrota.NAO;
 
-	/**
-	 * Launch the application.
-	 */
 	public static void main(String[] args) {
 		EventQueue.invokeLater(new Runnable() {
 			public void run() {
@@ -97,6 +104,7 @@ public class TesteJogo extends JFrame {
 			public void componentResized(ComponentEvent e) {
 				System.out.println("ComponentResized");
 				moverPah();
+				frameWidth = contentPane.getWidth();
 			}
 
 			@Override
@@ -150,6 +158,12 @@ public class TesteJogo extends JFrame {
 		menuBar.add(menuJogo);
 
 		menuItemJogar = new JMenuItem("Nogo jogo");
+		menuItemJogar.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent e) {
+				startGame();
+
+			}
+		});
 		menuJogo.add(menuItemJogar);
 		contentPane = new JPanel() {
 			@Override
@@ -235,20 +249,29 @@ public class TesteJogo extends JFrame {
 	}
 
 	private void moverSacola() throws InterruptedException {
-		new Thread(() -> {
-			try {
-				while (true) {
-					// refreshPanel();
-					definirPosicaoSacola();
-					verificarImpactoSacola();
-					removerSacolaPerdida();
-					Thread.sleep(20);
-				}
-			} catch (Exception e) {
-				e.printStackTrace();
-			}
+		threadMoverSacola = new ThreadMoverSacola();
+		threadMoverSacola.start();
+	}
 
-		}).start();
+	private void definirLVLGame() {
+		if (pts == 50 && contFaseUm == 0) {
+			velocidadeSacola -= 9;
+			contFaseUm = 1;
+			tempNovaSacola = 2000;
+		}
+
+		if (pts == 100 && contFaseDois == 0) {
+			velocidadeSacola -= 5;
+			contFaseDois = 1;
+			tempNovaSacola = 800;
+		}
+	}
+
+	public void resetLevelGame() {
+		contFaseDois = 0;
+		contFaseUm = 0;
+		velocidadeSacola = 20;
+		tempNovaSacola = 3000;
 	}
 
 	public void verificarImpactoSacola() throws InterruptedException {
@@ -261,15 +284,105 @@ public class TesteJogo extends JFrame {
 					removerSacolaImpacto();
 					criarExplosaoImpacto();
 					definirPontuacao();
+				} else if (sacola.getY() > contentPane.getHeight()) {
+					vidas--;
+					labelVidas.setText("Vidas: " + vidas);
 				}
+
+				definirDerrota();
 			}
 		}
+
+	}
+
+	public void novoLimparSacolas() {
+		int qtdSacola = 0;
+		List indices =  new ArrayList<JLabel>();
+		for (int i = 0; i < contentPane.getComponentCount(); i++) {
+			if(contentPane.getComponent(i) instanceof JLabel) {
+				indices.add(contentPane.getComponent(i));
+			}
+		}
+		for (int i = 0; i < indices.size(); i++) {
+			contentPane.remove((JLabel) indices.get(i));
+			refreshPanel();
+		}
+
+	}
+
+	public void limparSacolasDerrota() {
+		refreshPanel();
+		int sacolaRemovida = 0;
+		System.out.println("Count >>> " + contentPane.getComponentCount());
+		for (int x = 0; x < contentPane.getComponentCount(); x++) {
+			if (contentPane.getComponent(x) instanceof JLabel) {
+				sacola = (JLabel) contentPane.getComponent(x);
+//				if (sacola.getText().length() == 0 || sacola.getText().isBlank() || sacola.getText().isEmpty()) {
+				contentPane.remove(sacola);
+				sacola.setBounds(-1000, -1000, 0, 0);
+				refreshPanel();
+				sacolaRemovida++;
+				System.out.println("Count >>> " + contentPane.getComponentCount());
+				System.out.println("Qtd sacola removida: " + sacolaRemovida);
+//				}
+			}
+		}
+		refreshPanel();
+
+	}
+
+	public void definirDerrota() {
+		if (vidas == 0) {
+			JOptionPane.showMessageDialog(frame, "Você perdeu! tente na proxima vez... :( ");
+			suspendGame();
+		}
+	}
+
+	private void suspendGame() {
+		if (threadCriaSacola.isAlive())
+			threadCriaSacola.stop();
+		if (threadMoverSacola.isAlive())
+			threadMoverSacola.stop();
+		resetLevelGame();
+
+	}
+
+	private void startGame() {
+		try {
+			resetLabelsNovoGame();
+			suspendGame();
+			//limparSacolasDerrota();
+			novoLimparSacolas();
+			Thread.sleep(500);
+			startThreadGame();
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+		}
+
+	}
+
+	private void startThreadGame() {
+		if (!threadMoverSacola.isAlive()) {
+			threadMoverSacola = new ThreadMoverSacola();
+			threadMoverSacola.start();
+		}
+		if (!threadCriaSacola.isAlive()) {
+			threadCriaSacola = new ThreadCriaSacola();
+			threadCriaSacola.start();
+		}
+	}
+
+	private void resetLabelsNovoGame() {
+		pts = 0;
+		vidas = 3;
+		labelPts.setText("Pontos: " + pts);
+		labelVidas.setText("Vidas: " + vidas);
 	}
 
 	private void definirPontuacao() throws InterruptedException {
 		pts += 10;
 		labelPts.setText("Pontos: " + pts);
-		//adicionarInfoPts();
+		// adicionarInfoPts();
 	}
 
 	private void criarExplosaoImpacto() throws InterruptedException {
@@ -391,28 +504,8 @@ public class TesteJogo extends JFrame {
 	}
 
 	private void criarSacola() throws InterruptedException {
-		int posicaoStartSacolaY = 10;
-
-		Thread criaSacola = new Thread(() -> {
-			while (true) {
-				try {
-					int posicaoStartSacolaX = ThreadLocalRandom.current().nextInt(SACOLA_WIDTH,
-							(this.getWidth() - SACOLA_WIDTH));
-					System.out.println("Posicao Sacola X " + posicaoStartSacolaX);
-					sacola = new JLabel(UUID.randomUUID().toString());
-					sacola.setIcon(new ImageIcon("src/saco-de-lixo.png"));
-					sacola.setBounds(posicaoStartSacolaX, posicaoStartSacolaY, SACOLA_WIDTH, SACOLA_HEIGHT);
-					contentPane.add(sacola);
-					// refreshPanel();
-					Thread.sleep((1000 * 3));
-				} catch (Exception e) {
-					e.printStackTrace();
-					break;
-				}
-
-			}
-		});
-		criaSacola.start();
+		threadCriaSacola = new ThreadCriaSacola();
+		threadCriaSacola.start();
 
 	}
 
@@ -453,21 +546,91 @@ public class TesteJogo extends JFrame {
 	public void playSongControlVol(String pathSong, float volume) {
 
 		try {
-			AudioInputStream audioStream = AudioSystem.getAudioInputStream(new File(pathSong));
-			AudioFormat baseFormat = audioStream.getFormat();
-			AudioFormat decodedFormat = new AudioFormat(AudioFormat.Encoding.PCM_SIGNED, baseFormat.getSampleRate(), 16,
-					baseFormat.getChannels(), baseFormat.getChannels() * 2, baseFormat.getSampleRate(), false);
-			AudioInputStream audioStream2 = AudioSystem.getAudioInputStream(decodedFormat, audioStream);
-			Clip clip = AudioSystem.getClip();
-			clip.open(audioStream2);
-			clip.start();
-			FloatControl gainControl = (FloatControl) clip.getControl(FloatControl.Type.MASTER_GAIN);
-			gainControl.setValue(volume);
+			AudioInputStream audioStream2 = audioInputStream(pathSong);
+			clipAudio(volume, audioStream2);
 		} catch (UnsupportedAudioFileException | IOException e) {
 			e.printStackTrace();
 		} catch (LineUnavailableException e) {
 			e.printStackTrace();
 		}
+	}
+
+	private void clipAudio(float volume, AudioInputStream audioStream2) throws LineUnavailableException, IOException {
+		Clip clip = AudioSystem.getClip();
+		clip.open(audioStream2);
+		clip.start();
+		FloatControl gainControl = (FloatControl) clip.getControl(FloatControl.Type.MASTER_GAIN);
+		gainControl.setValue(volume);
+	}
+
+	private AudioInputStream audioInputStream(String pathSong) throws UnsupportedAudioFileException, IOException {
+		AudioInputStream audioStream = AudioSystem.getAudioInputStream(new File(pathSong));
+		AudioFormat baseFormat = audioStream.getFormat();
+		AudioFormat decodedFormat = new AudioFormat(AudioFormat.Encoding.PCM_SIGNED, baseFormat.getSampleRate(), 16,
+				baseFormat.getChannels(), baseFormat.getChannels() * 2, baseFormat.getSampleRate(), false);
+		AudioInputStream audioStream2 = AudioSystem.getAudioInputStream(decodedFormat, audioStream);
+		return audioStream2;
+	}
+
+	public enum Derrota {
+		SIM, NAO
+	}
+
+	class ThreadMoverSacola extends Thread {
+
+		@Override
+		public void run() {
+			try {
+
+				while (true) {
+					// refreshPanel();
+					System.out.println("Thread mover sacola...");
+					definirPosicaoSacola();
+					verificarImpactoSacola();
+					removerSacolaPerdida();
+					definirLVLGame();
+					Thread.sleep(velocidadeSacola);
+				}
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
+		}
+
+	}
+
+	class ThreadCriaSacola extends Thread {
+		boolean terminate = false;
+		int posicaoStartSacolaY = 10;
+
+		@Override
+		public void run() {
+			while (!terminate) {
+				try {
+					int posicaoStartSacolaX = ThreadLocalRandom.current().nextInt(SACOLA_WIDTH,
+							(frameWidth - SACOLA_WIDTH));
+					System.out.println("Posicao Sacola X " + posicaoStartSacolaX);
+					sacola = new JLabel();
+					sacola.setIcon(new ImageIcon("src/saco-de-lixo.png"));
+					sacola.setBounds(posicaoStartSacolaX, posicaoStartSacolaY, SACOLA_WIDTH, SACOLA_HEIGHT);
+					contentPane.add(sacola);
+					// refreshPanel();
+					Thread.sleep(tempNovaSacola);
+				} catch (Exception e) {
+					e.printStackTrace();
+					break;
+				}
+
+			}
+		}
+
+		public void cancel() {
+			this.terminate = true;
+		}
+
+		public void open() {
+			this.terminate = false;
+		}
+
 	}
 
 }
